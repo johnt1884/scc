@@ -1323,7 +1323,7 @@
             const header = document.createElement('div');
             header.className = 'panel-section-title';
             header.style.color = 'var(--date-text-color)';
-            header.textContent = videoName;
+            header.textContent = videoName || '';
             panelContent.appendChild(header);
 
             // Add Category UI
@@ -2175,7 +2175,7 @@
         async function openVideoEditor(videoName, projectPath, subfolder, projectName) {
             const key = projectPath + '|' + videoName;
             editorCurrentVideo = { videoName, projectPath, subfolder, projectName };
-            editorFileInfo.textContent = `${videoName} (${projectPath})`;
+            editorFileInfo.textContent = `${videoName || ''} (${projectPath || ''})`;
 
             const selection = shortcutSelections.get(key);
 
@@ -2932,7 +2932,7 @@
                     currentMode = 'playlist';
                     setSelectionType('both-sc');
                     setVisibilityForMode(currentMode);
-                    await renderPlaylistMode();
+                    await renderVideosInternal(false, sortSelector.value, true);
                 } catch (err) {
                     if (err.name !== 'AbortError') {
                         console.error('Failed to open directory or render playlist mode:', err);
@@ -5443,6 +5443,8 @@
                                 if (playlistCreationTime && effectiveDate <= (playlistCreationTime + 1000)) continue;
                             } else if (hasAnyShortcuts) {
                                 if (!hasProjectSc && !hasRootSc) continue;
+                            } else if (currentMode === 'playlist') {
+                                if (!hasProjectSc && !hasRootSc) continue;
                             }
                         }
 
@@ -5501,25 +5503,6 @@
                         dateInfo.textContent = `Created: ${new Date(videoFile.lastModified).toLocaleString()}`;
                         rowDiv.appendChild(dateInfo);
 
-                        let multiplierInput;
-                        if (currentMode === 'playlist-root' || currentMode === 'update-playlist-root') {
-                            const navContainer = document.createElement('div');
-                            navContainer.className = 'playlist-nav-container';
-                            rowDiv.appendChild(navContainer);
-                            multiplierInput = document.createElement('input');
-                            multiplierInput.type = 'number';
-                            multiplierInput.className = 'multiplier-input';
-                            multiplierInput.value = 1;
-                            multiplierInput.min = 1;
-                            multiplierInput.title = 'Add to playlist multiple times';
-                            navContainer.appendChild(multiplierInput);
-                            multiplierInput.addEventListener('change', () => {
-                                const key = project.path + '|' + videoFile.name;
-                                const existingSelection = shortcutSelections.get(key);
-                                if (existingSelection) existingSelection.multiplier = parseInt(multiplierInput.value) || 1;
-                            });
-                            multiplierInput.addEventListener('click', (e) => e.stopPropagation());
-                        }
 
                         const thumbnailsContainer = document.createElement('div');
                         thumbnailsContainer.className = 'thumbnails-container';
@@ -6318,9 +6301,9 @@
 
             const selections = Array.from(shortcutSelections.values());
 
-            const playlistScSelections = selections.filter(s => s.type === 'playlist-sc' || (s.videoName !== 'Playlist Item' && s.type));
-            const rootScSelections = selections.filter(s => s.videoName === 'Playlist Item' && (s.type === 'root-sc' || s.type === 'both-sc'));
-            const subfolderScSelections = selections.filter(s => s.videoName === 'Playlist Item' && (s.type === 'subfolder-sc' || s.type === 'both-sc'));
+            const playlistScSelections = selections.filter(s => s.type);
+            const rootScSelections = []; // dummy project rows no longer used
+            const subfolderScSelections = [];
 
             if (playlistScSelections.length > 0) {
                 scriptLines.push("# --- Processing Specific Video Selections ---");
@@ -6433,49 +6416,6 @@
             scriptLines.push('$playlistPath = (Join-Path -Path \"$BaseDir\" -ChildPath "playlist.m3u")');
             scriptLines.push('\$script:playlistContent | Out-File -LiteralPath \"\$playlistPath\" -Encoding utf8');
             scriptLines.push('Write-Host "Playlist created at: $playlistPath"');
-
-            scriptLines.push("\$luaPath = 'C:\\Bridge\\misc\\tools\\mpv-x86_64-v3-20260418-git-4377cce\\portable_config\\scripts\\autorotate.lua'");
-            scriptLines.push('\$allRotations = @{}');
-            scriptLines.push('if (Test-Path -LiteralPath \"$luaPath\") {');
-            scriptLines.push('    \$existingContent = Get-Content -LiteralPath \"$luaPath\" -Raw');
-            scriptLines.push('    if (\$existingContent -match \'(?s)local rotations = \\{(.*?)\\}\') {');
-            scriptLines.push('        \$inner = \$matches[1]');
-            scriptLines.push('        \$entries = \$inner -split \',\'');
-            scriptLines.push('        foreach (\$entry in \$entries) {');
-            scriptLines.push('            if (\$entry -match "\\[[\'\\"\" ]*(.*?)[\'\\"\" ]*\\]\\s*=\\s*[\'\\"\" ]?(\\d+)[\'\\"\" ]?") {');
-            scriptLines.push('                \$allRotations[\$matches[1]] = \$matches[2]');
-            scriptLines.push('            }');
-            scriptLines.push('        }');
-            scriptLines.push('    }');
-            scriptLines.push('}');
-            scriptLines.push('foreach (\$file in \$script:rotatedFiles.Keys) { \$allRotations[\$file] = \$script:rotatedFiles[\$file] }');
-            scriptLines.push('if (\$allRotations.Count -gt 0) {');
-            scriptLines.push('    \$luaDir = Split-Path -Parent \$luaPath');
-            scriptLines.push('    if (-not (Test-Path -LiteralPath \$luaDir)) { [System.IO.Directory]::CreateDirectory(\$luaDir) | Out-Null }');
-            scriptLines.push('    \$luaContent = @()');
-            scriptLines.push("    \$luaContent += 'local rotations = {'");
-            scriptLines.push('    foreach (\$file in \$allRotations.Keys) {');
-            scriptLines.push('        \$rot = \$allRotations[\$file]');
-            scriptLines.push("        \$escapedFile = \$file.Replace(\"'\", \"\\\\'\")");
-            scriptLines.push("        \$luaContent += \"    ['\$escapedFile'] = \$rot,\"");
-            scriptLines.push("    }");
-            scriptLines.push("    \$luaContent += '}'");
-            scriptLines.push("    \$luaContent += ''");
-            scriptLines.push("    \$luaContent += 'mp.register_event(\"file-loaded\", function()'");
-            scriptLines.push("    \$luaContent += '    local path = mp.get_property(\"path\")'");
-            scriptLines.push("    \$luaContent += '    if not path then return end'");
-            scriptLines.push("    \$luaContent += ''");
-            scriptLines.push("    \$luaContent += '    mp.set_property(\"video-rotate\", 0)'");
-            scriptLines.push("    \$luaContent += ''");
-            scriptLines.push("    \$luaContent += '    local filename = path:match(\"([^/\\\\\\\\]+)\$\") or path'");
-            scriptLines.push("    \$luaContent += ''");
-            scriptLines.push("    \$luaContent += '    if rotations[filename] then'");
-            scriptLines.push("    \$luaContent += '        mp.set_property(\"video-rotate\", rotations[filename])'");
-            scriptLines.push("    \$luaContent += '    end'");
-            scriptLines.push("    \$luaContent += 'end)'");
-            scriptLines.push('    \$luaContent | Out-File -LiteralPath \"$luaPath\" -Encoding utf8');
-            scriptLines.push('    Write-Host "Updated MPV autorotate script at: \$luaPath"');
-            scriptLines.push('}');
 
             
             scriptLines.push('Write-Host "Total items in playlist: \$(\$script:playlistContent.Count - 1)"');
