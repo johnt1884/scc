@@ -1173,6 +1173,7 @@
         const deleteRotationBtn = null;
 
         let allVideoFiles = [];
+        let loadErrors = [];
         let allProjectFolders = [];
         const skipDirs = new Set(['edit thumbnails', 'thumbnails', 'sc', '.git', 'node_modules', 'recovery', '$recycle.bin', 'system volume information', 'originals']);
         let shortcutSelections = new Map(); // Key: projectPath + '|' + videoName, Value: { videoName, projectPath, subfolder, type, rotation }
@@ -1794,6 +1795,38 @@
                 });
             }
             infoDropdown.appendChild(list);
+
+            // Errors Section
+            const errorsHeader = document.createElement('div');
+            errorsHeader.style.fontWeight = 'bold';
+            errorsHeader.style.fontSize = '0.9em';
+            errorsHeader.style.marginTop = '15px';
+            errorsHeader.style.marginBottom = '5px';
+            errorsHeader.style.color = '#ff4444';
+            errorsHeader.textContent = `Errors / Missing Data (${loadErrors.length}):`;
+            infoDropdown.appendChild(errorsHeader);
+
+            const errorsList = document.createElement('div');
+            errorsList.style.fontSize = '0.85em';
+            errorsList.style.maxHeight = '200px';
+            errorsList.style.overflowY = 'auto';
+
+            if (loadErrors.length === 0) {
+                errorsList.innerHTML = '<div style="color: #888;">No errors detected.</div>';
+            } else {
+                loadErrors.forEach(err => {
+                    const item = document.createElement('div');
+                    item.style.padding = '5px 0';
+                    item.style.borderBottom = '1px solid rgba(255,0,0,0.1)';
+                    item.innerHTML = `
+                        <div style="font-weight: bold; color: #ff8888;">[${err.type}] ${err.name}</div>
+                        <div style="font-size: 0.9em; color: #ccc; word-break: break-all;">Path: ${err.path}</div>
+                        <div style="font-size: 0.9em; font-style: italic; color: #ffaaaa;">Reason: ${err.reason}</div>
+                    `;
+                    errorsList.appendChild(item);
+                });
+            }
+            infoDropdown.appendChild(errorsList);
         }
 
         function updateTopCategoriesMenu() {
@@ -5027,6 +5060,7 @@
             createdObjectUrls.forEach(URL.revokeObjectURL);
             createdObjectUrls = [];
             canvases.clear();
+            loadErrors = [];
             shortcutSelections.clear();
             initialShortcutSelections.clear();
             videoCategories.clear();
@@ -5053,6 +5087,24 @@
                     isProject: isProject,
                     insideProject: insideProject
                 });
+
+                if (!isProject && !insideProject) {
+                    let hasVideos = false;
+                    for await (const entry of dirHandle.values()) {
+                        if (entry.kind === 'file' && entry.name.match(/\.(mp4|avi|mov|mkv)$/i)) {
+                            hasVideos = true;
+                            break;
+                        }
+                    }
+                    if (hasVideos) {
+                        loadErrors.push({
+                            type: 'Directory',
+                            name: dirHandle.name,
+                            path: currentPath,
+                            reason: 'Missing "Edit Thumbnails" folder'
+                        });
+                    }
+                }
 
                 if (isProject && findProjects) {
                     let timestamp = 0;
@@ -5305,6 +5357,18 @@
 
                     const videoFileMap = new Map(projectVideoFiles.map(f => [f.name.substring(0, f.name.lastIndexOf('.')), f]));
                     
+                    projectVideoFiles.forEach(videoFile => {
+                        const baseName = videoFile.name.substring(0, videoFile.name.lastIndexOf('.'));
+                        if (!groupedFiles[baseName]) {
+                            loadErrors.push({
+                                type: 'Video',
+                                name: videoFile.name,
+                                path: project.path + (videoFile.subfolder ? '\\' + videoFile.subfolder : ''),
+                                reason: 'Missing thumbnails'
+                            });
+                        }
+                    });
+
                     let videoNames = Object.keys(groupedFiles);
                     videoNames.sort((a, b) => {
                         if (sortBy === 'name-asc') return a.localeCompare(b);
