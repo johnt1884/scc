@@ -3432,13 +3432,20 @@
                 updateRowUI(rowDiv, videoName, projectPath);
             };
 
-            leftGroup.appendChild(createDeleteCross(videoName, projectPath, subfolder, rowDiv));
-            leftGroup.appendChild(createBtn('Rotate Left', () => rotate(-90)));
-            leftGroup.appendChild(createBtn('Rotate Right', () => rotate(90)));
+            const isPlaylistMode = (currentMode === 'playlist-root' || currentMode === 'update-playlist-root');
+
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(createDeleteCross(videoName, projectPath, subfolder, rowDiv));
+                leftGroup.appendChild(createBtn('Rotate Left', () => rotate(-90)));
+                leftGroup.appendChild(createBtn('Rotate Right', () => rotate(90)));
+            }
             leftGroup.appendChild(createBtn('Both', () => setType('both-sc'), 'both-sc', '--both-sc-color'));
             leftGroup.appendChild(createBtn('Subfolder', () => setType('subfolder-sc'), 'subfolder-sc', '--subfolder-sc-color'));
             leftGroup.appendChild(createBtn('Root', () => setType('root-sc'), 'root-sc', '--root-sc-color'));
-            leftGroup.appendChild(createBtn('Rotate 180°', () => rotate(180)));
+
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(createBtn('Rotate 180°', () => rotate(180)));
+            }
 
             const toggleFlip = () => {
                 let selection = shortcutSelections.get(key);
@@ -3459,7 +3466,9 @@
                 
                 updateRowUI(rowDiv, videoName, projectPath);
             };
-            leftGroup.appendChild(createBtn('H Flip', toggleFlip));
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(createBtn('H Flip', toggleFlip));
+            }
 
             const moveSelect = document.createElement('select');
             moveSelect.className = 'move-to-selector';
@@ -3523,44 +3532,46 @@
                 selection.targetProject = lastUsedMoveTarget;
                 updateRowUI(rowDiv, videoName, projectPath);
             };
-            leftGroup.appendChild(moveSelect); leftGroup.appendChild(quickMoveBtn);
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(moveSelect); leftGroup.appendChild(quickMoveBtn);
 
-            const editBtn = document.createElement('button');
-            editBtn.className = 'bar-button row-bar-btn edit-btn';
-            editBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
-            editBtn.title = 'Edit video';
-            editBtn.onclick = (e) => {
-                e.stopPropagation();
-                openVideoEditor(videoName, projectPath, subfolder, projectName);
-            };
-            leftGroup.appendChild(editBtn);
+                const editBtn = document.createElement('button');
+                editBtn.className = 'bar-button row-bar-btn edit-btn';
+                editBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+                editBtn.title = 'Edit video';
+                editBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    openVideoEditor(videoName, projectPath, subfolder, projectName);
+                };
+                leftGroup.appendChild(editBtn);
 
-            const catBtn = document.createElement('button');
-            catBtn.className = 'bar-button row-bar-btn';
-            catBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>';
-            catBtn.title = 'Categories';
-            catBtn.onclick = (e) => {
-                e.stopPropagation();
-                const oldKey = selectedVideoKey;
-                if (selectedVideoKey === key) {
-                    selectedVideoKey = null;
-                } else {
-                    selectedVideoKey = key;
-                    if (!enableCategoriesPanelCheckbox.checked) {
-                        enableCategoriesPanelCheckbox.checked = true;
-                        enableCategoriesPanelCheckbox.dispatchEvent(new Event('change'));
+                const catBtn = document.createElement('button');
+                catBtn.className = 'bar-button row-bar-btn';
+                catBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>';
+                catBtn.title = 'Categories';
+                catBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const oldKey = selectedVideoKey;
+                    if (selectedVideoKey === key) {
+                        selectedVideoKey = null;
+                    } else {
+                        selectedVideoKey = key;
+                        if (!enableCategoriesPanelCheckbox.checked) {
+                            enableCategoriesPanelCheckbox.checked = true;
+                            enableCategoriesPanelCheckbox.dispatchEvent(new Event('change'));
+                        }
                     }
-                }
-                
-                if (oldKey) {
-                    const [oldProj, oldVid] = oldKey.split('|');
-                    const oldRow = document.querySelector(`.landscape-row[data-video-name="${oldVid}"][data-project-path="${oldProj}"]`);
-                    if (oldRow) updateRowUI(oldRow, oldVid, oldProj);
-                }
-                updateRowUI(rowDiv, videoName, projectPath);
-                renderCategoriesPanel();
-            };
-            leftGroup.appendChild(catBtn);
+
+                    if (oldKey) {
+                        const [oldProj, oldVid] = oldKey.split('|');
+                        const oldRow = document.querySelector(`.landscape-row[data-video-name="${oldVid}"][data-project-path="${oldProj}"]`);
+                        if (oldRow) updateRowUI(oldRow, oldVid, oldProj);
+                    }
+                    updateRowUI(rowDiv, videoName, projectPath);
+                    renderCategoriesPanel();
+                };
+                leftGroup.appendChild(catBtn);
+            }
 
             bar.appendChild(leftGroup);
 
@@ -3578,7 +3589,7 @@
                 nameSpan.appendChild(icon);
             }
             
-            nameSpan.appendChild(document.createTextNode(videoName));
+            nameSpan.appendChild(document.createTextNode(videoName || ''));
             rightGroup.appendChild(nameSpan);
             bar.appendChild(rightGroup);
 
@@ -6272,7 +6283,7 @@
                 '',
                 'function Add-PlaylistEntry {',
                 '    param([string]$path, [string]\$rotation, [int]\$multiplier, [string]\$rotationKey)',
-                '    \$fullPath = [System.IO.Path]::GetFullPath((Join-Path -Path \$BaseDir -ChildPath $path))',
+                '    \$fullPath = if ([System.IO.Path]::IsPathRooted($path)) { $path } else { [System.IO.Path]::GetFullPath((Join-Path -Path \$BaseDir -ChildPath $path)) }',
                 '    \$key = if (\$rotationKey) { \$rotationKey } else { [System.IO.Path]::GetFileName(\$fullPath) }',
                 '    if (\$script:addedTargets.Add(\$fullPath)) {',
                 '        if (\$rotation -and \$rotation -ne "0") {',
@@ -6366,9 +6377,9 @@
             if (playlistScSelections.length > 0) {
                 scriptLines.push("# --- Processing Specific Video Selections ---");
                 playlistScSelections.forEach(sel => {
-                    const escapedVideoName = escapePSString(sel.videoName);
-                    const escapedProjectPath = escapePSString(sel.projectPath);
-                    const escapedSubfolder = escapePSString(sel.subfolder);
+                    const escapedVideoName = escapePSString(sel.videoName || '');
+                    const escapedProjectPath = escapePSString(sel.projectPath || '');
+                    const escapedSubfolder = escapePSString(sel.subfolder || '');
                     const multiplier = sel.multiplier || 1;
                     const rotation = (sel.buttonRotationTouched && sel.rotation) ? sel.rotation : "0";
 
@@ -6379,16 +6390,19 @@
                         scriptLines.push(`Write-Host "Added to playlist (shortcut): ${escapedVideoName} (${multiplier}x)"`);
                     } else {
                         summaryActions.shortcuts_verify.push(`${sel.videoName} (for Playlist)`);
-                        let targetPathConstruction = '\$BaseDir';
+
                         if (sel.projectPath) {
-                            targetPathConstruction = `(Join-Path -Path ${targetPathConstruction} -ChildPath '${escapedProjectPath}')`;
+                            scriptLines.push(`\$targetPath = [System.IO.Path]::GetFullPath((Join-Path -Path \"\$BaseDir\" -ChildPath '${escapedProjectPath}'))`);
+                        } else {
+                            scriptLines.push(`\$targetPath = \$BaseDir`);
                         }
+
                         if (sel.subfolder) {
-                            targetPathConstruction = `(Join-Path -Path ${targetPathConstruction} -ChildPath '${escapedSubfolder}')`;
+                            scriptLines.push(`\$targetPath = [System.IO.Path]::GetFullPath((Join-Path -Path \$targetPath -ChildPath '${escapedSubfolder}'))`);
                         }
-                        targetPathConstruction = `Join-Path -Path ${targetPathConstruction} -ChildPath '${escapedVideoName}'`;
                         
-                        scriptLines.push(`\$targetPath = [System.IO.Path]::GetFullPath((${targetPathConstruction}))`);
+                        scriptLines.push(`\$targetPath = [System.IO.Path]::GetFullPath((Join-Path -Path \$targetPath -ChildPath '${escapedVideoName}'))`);
+
                         scriptLines.push(`Add-PlaylistEntry -path \$targetPath -rotation '${rotation}' -multiplier ${multiplier} -rotationKey '${escapedVideoName}'`);
                         scriptLines.push(`Write-Host "Added to playlist (video): ${escapedVideoName} (${multiplier}x)"`);
                     }
@@ -6408,7 +6422,11 @@
                 scriptLines.push('if (Test-Path -LiteralPath \"$rootScFolder\") {');
                 scriptLines.push('    \$rotationCache = @{}');
                 scriptLines.push('    $shortcuts = Get-ChildItem -LiteralPath \"$rootScFolder\" -File | Where-Object { \$_.Extension -match \'^\\.(lnk|ink)\$\' }');
+                scriptLines.push('    \$totalShortcuts = if ($shortcuts) { $shortcuts.Count } else { 0 }');
+                scriptLines.push('    \$scIndex = 0');
                 scriptLines.push('    foreach ($shortcutFile in $shortcuts) {');
+                scriptLines.push('        \$scIndex++');
+                scriptLines.push('        if (\$scIndex % 10 -eq 0) { Write-Host "Processing root shortcut \$scIndex of \$totalShortcuts..." -ForegroundColor Gray }');
                 scriptLines.push('        \$targetPath = Get-ShortcutTarget $shortcutFile.FullName');
                 scriptLines.push('        if (-not \$targetPath) { continue }');
                 scriptLines.push('        foreach ($projPath in \$rootSelections.Keys) {');
@@ -6446,7 +6464,11 @@
                 scriptLines.push('        \$multiplier = \$subfolderSelections[$projPath]');
                 scriptLines.push('        \$rotationMap = Get-RotationDataMap $projPath');
                 scriptLines.push('        $projectShortcuts = Get-ChildItem -LiteralPath \"\$projPath\" -Recurse -File | Where-Object { \$_.Extension -match \'^\\.(lnk|ink)\$\' -and -not \$_.FullName.StartsWith(\$rootScFolder + [IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) }');
+                scriptLines.push('        \$totalProjShortcuts = if ($projectShortcuts) { $projectShortcuts.Count } else { 0 }');
+                scriptLines.push('        \$psIndex = 0');
                 scriptLines.push('        foreach ($shortcutFile in $projectShortcuts) {');
+                scriptLines.push('            \$psIndex++');
+                scriptLines.push('            if (\$psIndex % 10 -eq 0) { Write-Host "Processing sub-shortcut \$psIndex of \$totalProjShortcuts..." -ForegroundColor Gray }');
                 scriptLines.push('            \$targetPath = Get-ShortcutTarget $shortcutFile.FullName');
                 scriptLines.push('            if (-not \$targetPath) { continue }');
                 scriptLines.push('            \$videoName = [System.IO.Path]::GetFileName(\$targetPath).ToLower()');
