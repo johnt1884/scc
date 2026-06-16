@@ -908,6 +908,18 @@
                             <button id="revert-defaults-btn" style="width: 100%; text-align: center; border-top: 1px solid #ccc; font-weight: bold;">Revert to Default Colors</button>
                         </div>
                     </div>
+                    <div id="info-menu-container" style="position: relative; margin-right: 10px;">
+                        <button id="info-menu-btn" title="Information" class="bar-button" style="padding: 0 8px; display: flex; align-items: center; justify-content: center;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: white;">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                        </button>
+                        <div id="info-dropdown" class="dropdown-content" style="min-width: 300px; padding: 15px;">
+                            <!-- Content will be dynamically populated -->
+                        </div>
+                    </div>
                     <select id="h-size-selector" title="Horizontal Thumbnail Size">
                         <option value="auto">H Auto</option>
                         <option value="0.1">H 10%</option>
@@ -1150,6 +1162,8 @@
         const loadDropdown = document.getElementById('load-dropdown');
         const optionsMenuBtn = document.getElementById('options-menu-btn');
         const optionsDropdown = document.getElementById('options-dropdown');
+        const infoMenuBtn = document.getElementById('info-menu-btn');
+        const infoDropdown = document.getElementById('info-dropdown');
         const topCategoriesMenuBtn = document.getElementById('top-categories-menu-btn');
         const topCategoriesDropdown = document.getElementById('top-categories-dropdown');
         const applySizeAllBtn = document.getElementById('apply-size-all-btn');
@@ -1725,6 +1739,61 @@
             if (enableCategoriesPanelCheckbox.checked) {
                 renderCategoriesPanel();
             }
+        }
+
+        function updateInfoDropdown() {
+            infoDropdown.innerHTML = '';
+            const numDirectories = canvases.size;
+
+            const videoCounts = new Map();
+            allVideoFiles.forEach(video => {
+                const projectPath = video.projectPath || 'Root';
+                videoCounts.set(projectPath, (videoCounts.get(projectPath) || 0) + 1);
+            });
+
+            const header = document.createElement('div');
+            header.style.fontWeight = 'bold';
+            header.style.marginBottom = '10px';
+            header.style.borderBottom = '1px solid #444';
+            header.style.paddingBottom = '5px';
+            header.textContent = `Loaded Data Summary`;
+            infoDropdown.appendChild(header);
+
+            const summary = document.createElement('div');
+            summary.style.marginBottom = '15px';
+            summary.innerHTML = `
+                <div>Directories loaded: <strong>${numDirectories}</strong></div>
+                <div>Total videos loaded: <strong>${allVideoFiles.length}</strong></div>
+            `;
+            infoDropdown.appendChild(summary);
+
+            const detailsHeader = document.createElement('div');
+            detailsHeader.style.fontWeight = 'bold';
+            detailsHeader.style.fontSize = '0.9em';
+            detailsHeader.style.marginBottom = '5px';
+            detailsHeader.textContent = 'Videos per Directory:';
+            infoDropdown.appendChild(detailsHeader);
+
+            const list = document.createElement('div');
+            list.style.fontSize = '0.85em';
+            list.style.maxHeight = '300px';
+            list.style.overflowY = 'auto';
+
+            if (videoCounts.size === 0) {
+                list.innerHTML = '<div style="color: #888;">No videos loaded.</div>';
+            } else {
+                // Sort by directory name
+                const sortedPaths = Array.from(videoCounts.keys()).sort();
+                sortedPaths.forEach(path => {
+                    const count = videoCounts.get(path);
+                    const item = document.createElement('div');
+                    item.style.padding = '3px 0';
+                    item.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                    item.innerHTML = `<span style="color: var(--header-text-color);">${path}</span>: <strong>${count}</strong>`;
+                    list.appendChild(item);
+                });
+            }
+            infoDropdown.appendChild(list);
         }
 
         function updateTopCategoriesMenu() {
@@ -2412,6 +2481,8 @@
             loadMenuBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 optionsDropdown.style.display = 'none';
+                infoDropdown.style.display = 'none';
+                topCategoriesDropdown.style.display = 'none';
                 loadDropdown.style.display = loadDropdown.style.display === 'block' ? 'none' : 'block';
             });
 
@@ -2419,13 +2490,28 @@
                 e.stopPropagation();
                 loadDropdown.style.display = 'none';
                 topCategoriesDropdown.style.display = 'none';
+                infoDropdown.style.display = 'none';
                 optionsDropdown.style.display = optionsDropdown.style.display === 'block' ? 'none' : 'block';
+            });
+
+            infoMenuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                loadDropdown.style.display = 'none';
+                optionsDropdown.style.display = 'none';
+                topCategoriesDropdown.style.display = 'none';
+                if (infoDropdown.style.display === 'block') {
+                    infoDropdown.style.display = 'none';
+                } else {
+                    updateInfoDropdown();
+                    infoDropdown.style.display = 'block';
+                }
             });
 
             topCategoriesMenuBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 loadDropdown.style.display = 'none';
                 optionsDropdown.style.display = 'none';
+                infoDropdown.style.display = 'none';
                 if (topCategoriesDropdown.style.display === 'block') {
                     topCategoriesDropdown.style.display = 'none';
                 } else {
@@ -2438,6 +2524,7 @@
                 loadDropdown.style.display = 'none';
                 optionsDropdown.style.display = 'none';
                 topCategoriesDropdown.style.display = 'none';
+                infoDropdown.style.display = 'none';
             });
 
             optionsDropdown.addEventListener('click', (e) => {
@@ -2445,6 +2532,10 @@
             });
 
             topCategoriesDropdown.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            infoDropdown.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
 
