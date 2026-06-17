@@ -1848,7 +1848,13 @@
             const statsContainer = document.createElement('div');
             statsContainer.style.marginBottom = '15px';
 
-            const totalDirs = allProjectFolders.length;
+            const excludedFolders = new Set(['edit', 'edit thumbnails', 'landscape', 'landscape rotate', 'thumbnails', 'sc']);
+            const projectFoldersToStat = allProjectFolders.filter(f => {
+                const name = (f.path || f.name || "").split(/[\\/]/).pop().toLowerCase();
+                return !excludedFolders.has(name);
+            });
+
+            const totalDirs = projectFoldersToStat.length;
             const totalVideos = allVideoFiles.length;
 
             const summary = document.createElement('div');
@@ -1883,7 +1889,7 @@
             dirList.style.maxHeight = '200px';
             dirList.style.overflowY = 'auto';
 
-            allProjectFolders.forEach(folder => {
+            projectFoldersToStat.forEach(folder => {
                 const li = document.createElement('li');
                 const videoCount = allVideoFiles.filter(f => f.projectPath === folder.path).length;
                 if (videoCount === 0) {
@@ -3447,9 +3453,59 @@
                 leftGroup.appendChild(createBtn('Rotate Left', () => rotate(-90)));
                 leftGroup.appendChild(createBtn('Rotate Right', () => rotate(90)));
             }
+            leftGroup.appendChild(createBtn('Root', () => setType('root-sc'), 'root-sc', '--root-sc-color'));
+
+            if (isPlaylistMode) {
+                const navContainer = document.createElement('div');
+                navContainer.className = 'playlist-nav-container';
+                navContainer.style.marginBottom = '0';
+                navContainer.style.display = 'inline-flex';
+                navContainer.style.marginLeft = '10px';
+
+                if (currentMode === 'playlist') {
+                    const prevBtn = document.createElement('button');
+                    prevBtn.className = 'playlist-nav-btn';
+                    prevBtn.textContent = '◀';
+                    prevBtn.style.height = '28px';
+                    prevBtn.dataset.nav = 'prev';
+                    navContainer.appendChild(prevBtn);
+
+                    const nextBtn = document.createElement('button');
+                    nextBtn.className = 'playlist-nav-btn';
+                    nextBtn.textContent = '▶';
+                    nextBtn.style.height = '28px';
+                    nextBtn.dataset.nav = 'next';
+                    navContainer.appendChild(nextBtn);
+                }
+
+                const multiplierInput = document.createElement('input');
+                multiplierInput.type = 'number';
+                multiplierInput.className = 'multiplier-input';
+                multiplierInput.value = 1;
+                multiplierInput.min = 1;
+                multiplierInput.style.height = '28px';
+                multiplierInput.title = 'Add to playlist multiple times';
+
+                const existing = shortcutSelections.get(key);
+                if (existing && existing.multiplier) multiplierInput.value = existing.multiplier;
+
+                multiplierInput.addEventListener('change', () => {
+                    let selection = shortcutSelections.get(key);
+                    if (!selection) {
+                        selection = { videoName, projectPath, subfolder, projectName, type: '', rotation: "0", flipped: false };
+                        shortcutSelections.set(key, selection);
+                    }
+                    selection.multiplier = parseInt(multiplierInput.value) || 1;
+                });
+                multiplierInput.addEventListener('click', (e) => e.stopPropagation());
+
+                navContainer.appendChild(multiplierInput);
+                leftGroup.appendChild(navContainer);
+            }
+
             leftGroup.appendChild(createBtn('Both', () => setType('both-sc'), 'both-sc', '--both-sc-color'));
             leftGroup.appendChild(createBtn('Subfolder', () => setType('subfolder-sc'), 'subfolder-sc', '--subfolder-sc-color'));
-            leftGroup.appendChild(createBtn('Root', () => setType('root-sc'), 'root-sc', '--root-sc-color'));
+
 
             if (!isPlaylistMode) {
                 leftGroup.appendChild(createBtn('Rotate 180°', () => rotate(180)));
@@ -3622,7 +3678,7 @@
                 } else {
                     if (!selection) {
                         const row = cross.closest('.landscape-row');
-                        const projectName = row ? row.dataset.projectName : '';
+                        const projectName = row ? (row.dataset.projectName || '') : '';
                         selection = { videoName, projectPath, subfolder, projectName, type: 'delete-sc', rotation: "0" };
                         shortcutSelections.set(key, selection);
                     } else {
@@ -4757,7 +4813,7 @@
             if (miscUpdates.size > 0) {
                 scriptLines.push('# --- Updating Misc Data (Categories & Edit Rotations) ---');
                 miscUpdates.forEach((miscMap, projectPath) => {
-                    const projectName = displayedProjects.get(projectPath) || projectPath;
+                    const projectName = displayedProjects.get(projectPath) || projectPath || '';
                     const res = getPSPathRes('\$BaseDir', projectPath, projectName, '');
                     const miscFileVar = `(Join-Path -Path ${res} -ChildPath 'misc.txt')`;
                     const escapedProjectPath = escapePSString(projectPath);
@@ -5089,7 +5145,6 @@
             initialVideoCategories.clear();
             projectCategories.clear();
             loadErrors = [];
-            allScannedDirectories = [];
             thumbnailContainer.innerHTML = '';
             allVideoFiles = [];
 
@@ -5302,6 +5357,10 @@
             let processedProjects = 0;
             let firstCanvasRendered = false;
             for (const project of projectFolders) {
+                // Ensure this project is in allProjectFolders if not already (for stats)
+                if (!allProjectFolders.some(f => f.path === project.path)) {
+                    allProjectFolders.push(project);
+                }
                 try {
                     console.log(`Processing project: ${project.name} (Path: ${project.path})`);
                     await getMiscData(project.handle, project.path);
@@ -5351,15 +5410,14 @@
                         loadErrors.push({ project: project.path, reason: "Missing 'Edit Thumbnails' folder" });
                     }
 
-                    if (!editDirHandle) {
-                        continue;
-                    }
-
                     const landscapeFiles = [];
+                    if (editDirHandle) {
                     for await (const entry of editDirHandle.values()) {
                         if (entry.kind === 'file' && entry.name.match(/\.(jpe?g|png|gif|webp)$/i)) {
                             landscapeFiles.push(await entry.getFile());
                         }
+                    }
+
                     }
 
                     const groupedFiles = landscapeFiles.reduce((acc, file) => {
@@ -5479,7 +5537,7 @@
                     groupHeader.className = 'project-header';
                     const groupHeaderText = document.createElement('span');
                     const projectPrefix = (currentMode === 'root-sc' || currentMode === 'sc') ? 'Root Shortcuts: ' : '';
-                    groupHeaderText.textContent = `${projectPrefix}${project.name} (${projectRows.length} ${projectRows.length === 1 ? 'video' : 'videos'})`;
+                    groupHeaderText.textContent = `${projectPrefix}${project.name || ''} (${projectRows.length} ${projectRows.length === 1 ? 'video' : 'videos'})`;
                     groupHeader.appendChild(groupHeaderText);
 
                     if (isNewOnly) {
@@ -5496,8 +5554,8 @@
                     canvasElements.push(groupHeader);
 
                     if (projectRows.length === 0) {
-                        continue;
-                    }
+                        // Skip rendering videos but don't 'continue' so it stays in allProjectFolders
+                    } else {
 
                     for (const rowData of projectRows) {
                         const { rowDiv, videoFile, files, hasProjectSc, hasRootSc, rootScEntry } = rowData;
@@ -5508,25 +5566,6 @@
                         dateInfo.textContent = `Created: ${new Date(videoFile.lastModified).toLocaleString()}`;
                         rowDiv.appendChild(dateInfo);
 
-                        let multiplierInput;
-                        if (currentMode === 'playlist-root' || currentMode === 'update-playlist-root') {
-                            const navContainer = document.createElement('div');
-                            navContainer.className = 'playlist-nav-container';
-                            rowDiv.appendChild(navContainer);
-                            multiplierInput = document.createElement('input');
-                            multiplierInput.type = 'number';
-                            multiplierInput.className = 'multiplier-input';
-                            multiplierInput.value = 1;
-                            multiplierInput.min = 1;
-                            multiplierInput.title = 'Add to playlist multiple times';
-                            navContainer.appendChild(multiplierInput);
-                            multiplierInput.addEventListener('change', () => {
-                                const key = project.path + '|' + videoFile.name;
-                                const existingSelection = shortcutSelections.get(key);
-                                if (existingSelection) existingSelection.multiplier = parseInt(multiplierInput.value) || 1;
-                            });
-                            multiplierInput.addEventListener('click', (e) => e.stopPropagation());
-                        }
 
                         const thumbnailsContainer = document.createElement('div');
                         thumbnailsContainer.className = 'thumbnails-container';
@@ -5629,6 +5668,7 @@
                             allImageLoadPromises.push(promise);
                         });
                     }
+                    } // end else for projectRows.length > 0
                     if (projectRows.length > 0) {
                         const hr = document.createElement('hr');
                         canvasElements.push(hr);
@@ -6103,30 +6143,14 @@
 
                     rowDiv.appendChild(createRowActionBar('Playlist Item', project.path, candidateVideos[currentIndex].subfolder, rowDiv, project.name));
 
-                    const navContainer = document.createElement('div');
-                    navContainer.className = 'playlist-nav-container';
-                    rowDiv.appendChild(navContainer);
+                    const actionBar = rowDiv.querySelector('.row-action-bar');
+                    const prevBtn = actionBar.querySelector('.playlist-nav-btn[data-nav="prev"]');
+                    const nextBtn = actionBar.querySelector('.playlist-nav-btn[data-nav="next"]');
+                    const multiplierInput = actionBar.querySelector('.multiplier-input');
 
-                    const prevBtn = document.createElement('button');
-                    prevBtn.className = 'playlist-nav-btn';
-                    prevBtn.textContent = '◀';
-                    navContainer.appendChild(prevBtn);
-
-                    const nextBtn = document.createElement('button');
-                    nextBtn.className = 'playlist-nav-btn';
-                    nextBtn.textContent = '▶';
-                    navContainer.appendChild(nextBtn);
-
-                    const multiplierInput = document.createElement('input');
-                    multiplierInput.type = 'number';
-                    multiplierInput.className = 'multiplier-input';
-                    multiplierInput.value = 1;
-                    multiplierInput.min = 1;
-                    multiplierInput.title = 'Add to playlist multiple times';
-                    navContainer.appendChild(multiplierInput);
-
-                    if (candidateVideos.length <= 1) {
-                        navContainer.style.display = 'none';
+                    if (candidateVideos.length <= 1 && prevBtn) {
+                        prevBtn.style.display = 'none';
+                        nextBtn.style.display = 'none';
                     }
 
                     const dateInfo = document.createElement('div');
@@ -6216,32 +6240,23 @@
 
                     await updateDisplayedVideo(currentIndex);
 
-                    prevBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        currentIndex = (currentIndex - 1 + candidateVideos.length) % candidateVideos.length;
-                        updateDisplayedVideo(currentIndex);
-                    };
+                    if (prevBtn) {
+                        prevBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            currentIndex = (currentIndex - 1 + candidateVideos.length) % candidateVideos.length;
+                            updateDisplayedVideo(currentIndex);
+                        };
+                    }
 
-                    nextBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        currentIndex = (currentIndex + 1) % candidateVideos.length;
-                        updateDisplayedVideo(currentIndex);
-                    };
-
+                    if (nextBtn) {
+                        nextBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            currentIndex = (currentIndex + 1) % candidateVideos.length;
+                            updateDisplayedVideo(currentIndex);
+                        };
+                    }
 
                     updateRowUI(rowDiv, 'Playlist Item', project.path);
-
-                    multiplierInput.addEventListener('change', () => {
-                        const key = project.path + '|Playlist Item';
-                        const existingSelection = shortcutSelections.get(key);
-                        if (existingSelection) {
-                            existingSelection.multiplier = parseInt(multiplierInput.value) || 1;
-                        }
-                    });
-
-                    multiplierInput.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                    });
 
                 } catch (e) {
                     console.warn(`Could not process project '${project.name}' for playlist mode:`, e);
