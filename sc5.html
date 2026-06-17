@@ -1172,16 +1172,27 @@
         const rotationSelector = null;
         const deleteRotationBtn = null;
 
-        var allVideoFiles = [];
-        var allProjectFolders = [];
-        var loadErrors = [];
+        let allVideoFiles = [];
+        let allProjectFolders = [];
+        let loadErrors = [];
         const skipDirs = new Set(['edit thumbnails', 'thumbnails', 'sc', '.git', 'node_modules', 'recovery', '$recycle.bin', 'system volume information', 'originals']);
         let shortcutSelections = new Map(); // Key: projectPath + '|' + videoName, Value: { videoName, projectPath, subfolder, type, rotation }
         let initialShortcutSelections = new Map(); // Key: projectPath + '|' + videoName, Value: { type, rotation }
         let currentDirHandle;
         let g_rootHandle;
-        var currentMode = '';
-        var canvases = new Map();
+        let currentMode = '';
+        let canvases = new Map();
+
+        // Make globals available on window for testing/debugging
+        window.allVideoFiles = allVideoFiles;
+        window.allProjectFolders = allProjectFolders;
+        window.loadErrors = loadErrors;
+        window.shortcutSelections = shortcutSelections;
+        window.canvases = canvases;
+        Object.defineProperty(window, 'currentMode', {
+            get: function() { return currentMode; },
+            set: function(val) { currentMode = val; }
+        });
         let activeCanvasId = 0;
         let createdObjectUrls = [];
         let dummyTimestampProjects = new Set();
@@ -1837,7 +1848,7 @@
             const statsContainer = document.createElement('div');
             statsContainer.style.marginBottom = '15px';
 
-            const totalDirs = canvases.size;
+            const totalDirs = allProjectFolders.length;
             const totalVideos = allVideoFiles.length;
 
             const summary = document.createElement('div');
@@ -1872,13 +1883,14 @@
             dirList.style.maxHeight = '200px';
             dirList.style.overflowY = 'auto';
 
-            canvases.forEach(canvas => {
-                if (canvas.path !== undefined) {
-                    const li = document.createElement('li');
-                    const videoCount = allVideoFiles.filter(f => f.projectPath === canvas.path).length;
-                    li.textContent = `${canvas.name}: ${videoCount} videos`;
-                    dirList.appendChild(li);
+            allProjectFolders.forEach(folder => {
+                const li = document.createElement('li');
+                const videoCount = allVideoFiles.filter(f => f.projectPath === folder.path).length;
+                if (videoCount === 0) {
+                    li.style.color = '#888';
                 }
+                li.textContent = `${folder.path || folder.name || '(Root)'}: ${videoCount} videos`;
+                dirList.appendChild(li);
             });
             perDirContainer.appendChild(dirList);
             infoDropdown.appendChild(perDirContainer);
@@ -3428,7 +3440,7 @@
                 updateRowUI(rowDiv, videoName, projectPath);
             };
 
-            const isPlaylistMode = (currentMode === 'playlist-root' || currentMode === 'update-playlist-root');
+            const isPlaylistMode = (currentMode === 'playlist' || currentMode === 'playlist-root' || currentMode === 'update-playlist-root');
 
             if (!isPlaylistMode) {
                 leftGroup.appendChild(createDeleteCross(videoName, projectPath, subfolder, rowDiv));
@@ -3914,7 +3926,6 @@
                 shortcuts_delete: [],
                 file_delete: [],
                 moves: [],
-                lua: [],
                 categories: [],
                 thumb_cleanup: []
             };
@@ -5078,6 +5089,7 @@
             initialVideoCategories.clear();
             projectCategories.clear();
             loadErrors = [];
+            allScannedDirectories = [];
             thumbnailContainer.innerHTML = '';
             allVideoFiles = [];
 
@@ -5091,13 +5103,15 @@
                     isProject = true;
                 } catch (e) {}
 
-                allDiscoveredFolders.push({
+                const folderInfo = {
                     handle: dirHandle,
                     path: currentPath,
                     name: dirHandle.name,
                     isProject: isProject,
-                    insideProject: insideProject
-                });
+                    insideProject: insideProject,
+                    videoCount: 0
+                };
+                allDiscoveredFolders.push(folderInfo);
 
                 if (isProject && findProjects) {
                     let timestamp = 0;
@@ -5338,7 +5352,6 @@
                     }
 
                     if (!editDirHandle) {
-                        canvases.set(canvasId, { id: canvasId, name: project.name, elements: canvasElements, path: project.path });
                         continue;
                     }
 
@@ -5483,9 +5496,6 @@
                     canvasElements.push(groupHeader);
 
                     if (projectRows.length === 0) {
-                        if (!isShortcutsOnly && !isNewOnly) {
-                            canvases.set(canvasId, { id: canvasId, name: project.name, elements: canvasElements, path: project.path });
-                        }
                         continue;
                     }
 
@@ -6251,7 +6261,6 @@
                 shortcuts_verify: [],
                 shortcuts_delete: [],
                 moves: [],
-                lua: [],
                 categories: []
             };
 
@@ -6482,49 +6491,6 @@
             scriptLines.push('$playlistPath = (Join-Path -Path \"$BaseDir\" -ChildPath "playlist.m3u")');
             scriptLines.push('\$script:playlistContent | Out-File -LiteralPath \"\$playlistPath\" -Encoding utf8');
             scriptLines.push('Write-Host "Playlist created at: $playlistPath"');
-
-            scriptLines.push("\$luaPath = 'C:\\Bridge\\misc\\tools\\mpv-x86_64-v3-20260418-git-4377cce\\portable_config\\scripts\\autorotate.lua'");
-            scriptLines.push('\$allRotations = @{}');
-            scriptLines.push('if (Test-Path -LiteralPath \"$luaPath\") {');
-            scriptLines.push('    \$existingContent = Get-Content -LiteralPath \"$luaPath\" -Raw');
-            scriptLines.push('    if (\$existingContent -match \'(?s)local rotations = \\{(.*?)\\}\') {');
-            scriptLines.push('        \$inner = \$matches[1]');
-            scriptLines.push('        \$entries = \$inner -split \',\'');
-            scriptLines.push('        foreach (\$entry in \$entries) {');
-            scriptLines.push('            if (\$entry -match "\\[[\'\\"\" ]*(.*?)[\'\\"\" ]*\\]\\s*=\\s*[\'\\"\" ]?(\\d+)[\'\\"\" ]?") {');
-            scriptLines.push('                \$allRotations[\$matches[1]] = \$matches[2]');
-            scriptLines.push('            }');
-            scriptLines.push('        }');
-            scriptLines.push('    }');
-            scriptLines.push('}');
-            scriptLines.push('foreach (\$file in \$script:rotatedFiles.Keys) { \$allRotations[\$file] = \$script:rotatedFiles[\$file] }');
-            scriptLines.push('if (\$allRotations.Count -gt 0) {');
-            scriptLines.push('    \$luaDir = Split-Path -Parent \$luaPath');
-            scriptLines.push('    if (-not (Test-Path -LiteralPath \$luaDir)) { [System.IO.Directory]::CreateDirectory(\$luaDir) | Out-Null }');
-            scriptLines.push('    \$luaContent = @()');
-            scriptLines.push("    \$luaContent += 'local rotations = {'");
-            scriptLines.push('    foreach (\$file in \$allRotations.Keys) {');
-            scriptLines.push('        \$rot = \$allRotations[\$file]');
-            scriptLines.push("        \$escapedFile = \$file.Replace(\"'\", \"\\\\'\")");
-            scriptLines.push("        \$luaContent += \"    ['\$escapedFile'] = \$rot,\"");
-            scriptLines.push("    }");
-            scriptLines.push("    \$luaContent += '}'");
-            scriptLines.push("    \$luaContent += ''");
-            scriptLines.push("    \$luaContent += 'mp.register_event(\"file-loaded\", function()'");
-            scriptLines.push("    \$luaContent += '    local path = mp.get_property(\"path\")'");
-            scriptLines.push("    \$luaContent += '    if not path then return end'");
-            scriptLines.push("    \$luaContent += ''");
-            scriptLines.push("    \$luaContent += '    mp.set_property(\"video-rotate\", 0)'");
-            scriptLines.push("    \$luaContent += ''");
-            scriptLines.push("    \$luaContent += '    local filename = path:match(\"([^/\\\\\\\\]+)\$\") or path'");
-            scriptLines.push("    \$luaContent += ''");
-            scriptLines.push("    \$luaContent += '    if rotations[filename] then'");
-            scriptLines.push("    \$luaContent += '        mp.set_property(\"video-rotate\", rotations[filename])'");
-            scriptLines.push("    \$luaContent += '    end'");
-            scriptLines.push("    \$luaContent += 'end)'");
-            scriptLines.push('    \$luaContent | Out-File -LiteralPath \"$luaPath\" -Encoding utf8');
-            scriptLines.push('    Write-Host "Updated MPV autorotate script at: \$luaPath"');
-            scriptLines.push('}');
 
             
             scriptLines.push('Write-Host "Total items in playlist: \$(\$script:playlistContent.Count - 1)"');
