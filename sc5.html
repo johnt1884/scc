@@ -908,6 +908,18 @@
                             <button id="revert-defaults-btn" style="width: 100%; text-align: center; border-top: 1px solid #ccc; font-weight: bold;">Revert to Default Colors</button>
                         </div>
                     </div>
+                    <div id="info-menu-container" style="position: relative; margin-right: 10px;">
+                        <button id="info-menu-btn" title="Information" class="bar-button" style="padding: 0 8px; display: flex; align-items: center; justify-content: center;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: white;">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                        </button>
+                        <div id="info-dropdown" class="dropdown-content" style="min-width: 350px; padding: 15px; box-sizing: border-box;">
+                            <!-- Content will be dynamically populated -->
+                        </div>
+                    </div>
                     <select id="h-size-selector" title="Horizontal Thumbnail Size">
                         <option value="auto">H Auto</option>
                         <option value="0.1">H 10%</option>
@@ -1150,6 +1162,8 @@
         const loadDropdown = document.getElementById('load-dropdown');
         const optionsMenuBtn = document.getElementById('options-menu-btn');
         const optionsDropdown = document.getElementById('options-dropdown');
+        const infoMenuBtn = document.getElementById('info-menu-btn');
+        const infoDropdown = document.getElementById('info-dropdown');
         const topCategoriesMenuBtn = document.getElementById('top-categories-menu-btn');
         const topCategoriesDropdown = document.getElementById('top-categories-dropdown');
         const applySizeAllBtn = document.getElementById('apply-size-all-btn');
@@ -1158,15 +1172,16 @@
         const rotationSelector = null;
         const deleteRotationBtn = null;
 
-        let allVideoFiles = [];
-        let allProjectFolders = [];
+        var allVideoFiles = [];
+        var allProjectFolders = [];
+        var loadErrors = [];
         const skipDirs = new Set(['edit thumbnails', 'thumbnails', 'sc', '.git', 'node_modules', 'recovery', '$recycle.bin', 'system volume information', 'originals']);
         let shortcutSelections = new Map(); // Key: projectPath + '|' + videoName, Value: { videoName, projectPath, subfolder, type, rotation }
         let initialShortcutSelections = new Map(); // Key: projectPath + '|' + videoName, Value: { type, rotation }
         let currentDirHandle;
         let g_rootHandle;
-        let currentMode = '';
-        let canvases = new Map();
+        var currentMode = '';
+        var canvases = new Map();
         let activeCanvasId = 0;
         let createdObjectUrls = [];
         let dummyTimestampProjects = new Set();
@@ -1816,6 +1831,95 @@
             topCategoriesDropdown.style.minWidth = '300px';
         }
 
+        function renderInfoDropdown() {
+            infoDropdown.innerHTML = '';
+
+            const statsContainer = document.createElement('div');
+            statsContainer.style.marginBottom = '15px';
+
+            const totalDirs = canvases.size;
+            const totalVideos = allVideoFiles.length;
+
+            const summary = document.createElement('div');
+            summary.style.fontWeight = 'bold';
+            summary.style.marginBottom = '10px';
+            summary.style.borderBottom = '1px solid #444';
+            summary.style.paddingBottom = '5px';
+            summary.textContent = 'Data Loading Statistics';
+            statsContainer.appendChild(summary);
+
+            const dirStat = document.createElement('div');
+            dirStat.textContent = `Total Directories Loaded: ${totalDirs}`;
+            statsContainer.appendChild(dirStat);
+
+            const videoStat = document.createElement('div');
+            videoStat.textContent = `Total Videos Loaded: ${totalVideos}`;
+            statsContainer.appendChild(videoStat);
+
+            infoDropdown.appendChild(statsContainer);
+
+            const perDirContainer = document.createElement('div');
+            perDirContainer.style.marginBottom = '15px';
+            const perDirTitle = document.createElement('div');
+            perDirTitle.style.fontWeight = 'bold';
+            perDirTitle.style.marginBottom = '5px';
+            perDirTitle.textContent = 'Videos Per Directory:';
+            perDirContainer.appendChild(perDirTitle);
+
+            const dirList = document.createElement('ul');
+            dirList.style.margin = '0';
+            dirList.style.paddingLeft = '20px';
+            dirList.style.maxHeight = '200px';
+            dirList.style.overflowY = 'auto';
+
+            canvases.forEach(canvas => {
+                if (canvas.path !== undefined) {
+                    const li = document.createElement('li');
+                    const videoCount = allVideoFiles.filter(f => f.projectPath === canvas.path).length;
+                    li.textContent = `${canvas.name}: ${videoCount} videos`;
+                    dirList.appendChild(li);
+                }
+            });
+            perDirContainer.appendChild(dirList);
+            infoDropdown.appendChild(perDirContainer);
+
+            const errorContainer = document.createElement('div');
+            const errorTitle = document.createElement('div');
+            errorTitle.style.fontWeight = 'bold';
+            errorTitle.style.color = '#ff4444';
+            errorTitle.style.marginBottom = '5px';
+            errorTitle.textContent = `Errors (${loadErrors.length}):`;
+            errorContainer.appendChild(errorTitle);
+
+            if (loadErrors.length === 0) {
+                const noErrors = document.createElement('div');
+                noErrors.style.fontStyle = 'italic';
+                noErrors.style.color = '#888';
+                noErrors.textContent = 'No errors detected during scan.';
+                errorContainer.appendChild(noErrors);
+            } else {
+                const errorList = document.createElement('ul');
+                errorList.style.margin = '0';
+                errorList.style.paddingLeft = '20px';
+                errorList.style.maxHeight = '200px';
+                errorList.style.overflowY = 'auto';
+
+                loadErrors.forEach(err => {
+                    const li = document.createElement('li');
+                    li.style.color = '#ff8888';
+                    li.style.marginBottom = '5px';
+                    li.style.fontSize = '13px';
+                    let text = `[${err.project || 'Root'}] `;
+                    if (err.video) text += `${err.video}: `;
+                    text += err.reason;
+                    li.textContent = text;
+                    errorList.appendChild(li);
+                });
+                errorContainer.appendChild(errorList);
+            }
+            infoDropdown.appendChild(errorContainer);
+        }
+
 
 
             function getActualVideoRect() {
@@ -2419,13 +2523,28 @@
                 e.stopPropagation();
                 loadDropdown.style.display = 'none';
                 topCategoriesDropdown.style.display = 'none';
+                infoDropdown.style.display = 'none';
                 optionsDropdown.style.display = optionsDropdown.style.display === 'block' ? 'none' : 'block';
+            });
+
+            infoMenuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                loadDropdown.style.display = 'none';
+                optionsDropdown.style.display = 'none';
+                topCategoriesDropdown.style.display = 'none';
+                if (infoDropdown.style.display === 'block') {
+                    infoDropdown.style.display = 'none';
+                } else {
+                    renderInfoDropdown();
+                    infoDropdown.style.display = 'block';
+                }
             });
 
             topCategoriesMenuBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 loadDropdown.style.display = 'none';
                 optionsDropdown.style.display = 'none';
+                infoDropdown.style.display = 'none';
                 if (topCategoriesDropdown.style.display === 'block') {
                     topCategoriesDropdown.style.display = 'none';
                 } else {
@@ -2438,6 +2557,7 @@
                 loadDropdown.style.display = 'none';
                 optionsDropdown.style.display = 'none';
                 topCategoriesDropdown.style.display = 'none';
+                infoDropdown.style.display = 'none';
             });
 
             optionsDropdown.addEventListener('click', (e) => {
@@ -3150,7 +3270,7 @@
 
                         nameSpan.appendChild(icon);
                     }
-                    nameSpan.appendChild(document.createTextNode(videoName));
+                    nameSpan.appendChild(document.createTextNode(videoName || ''));
                 }
             }
 
@@ -3239,7 +3359,7 @@
                     }
                     btn.appendChild(circle);
                 }
-                btn.appendChild(document.createTextNode(text));
+                btn.appendChild(document.createTextNode(text || ''));
 
                 if (type) btn.dataset.type = type;
                 btn.onclick = (e) => {
@@ -3308,13 +3428,20 @@
                 updateRowUI(rowDiv, videoName, projectPath);
             };
 
-            leftGroup.appendChild(createDeleteCross(videoName, projectPath, subfolder, rowDiv));
-            leftGroup.appendChild(createBtn('Rotate Left', () => rotate(-90)));
-            leftGroup.appendChild(createBtn('Rotate Right', () => rotate(90)));
+            const isPlaylistMode = (currentMode === 'playlist-root' || currentMode === 'update-playlist-root');
+
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(createDeleteCross(videoName, projectPath, subfolder, rowDiv));
+                leftGroup.appendChild(createBtn('Rotate Left', () => rotate(-90)));
+                leftGroup.appendChild(createBtn('Rotate Right', () => rotate(90)));
+            }
             leftGroup.appendChild(createBtn('Both', () => setType('both-sc'), 'both-sc', '--both-sc-color'));
             leftGroup.appendChild(createBtn('Subfolder', () => setType('subfolder-sc'), 'subfolder-sc', '--subfolder-sc-color'));
             leftGroup.appendChild(createBtn('Root', () => setType('root-sc'), 'root-sc', '--root-sc-color'));
-            leftGroup.appendChild(createBtn('Rotate 180°', () => rotate(180)));
+
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(createBtn('Rotate 180°', () => rotate(180)));
+            }
 
             const toggleFlip = () => {
                 let selection = shortcutSelections.get(key);
@@ -3335,7 +3462,9 @@
                 
                 updateRowUI(rowDiv, videoName, projectPath);
             };
-            leftGroup.appendChild(createBtn('H Flip', toggleFlip));
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(createBtn('H Flip', toggleFlip));
+            }
 
             const moveSelect = document.createElement('select');
             moveSelect.className = 'move-to-selector';
@@ -3399,7 +3528,9 @@
                 selection.targetProject = lastUsedMoveTarget;
                 updateRowUI(rowDiv, videoName, projectPath);
             };
-            leftGroup.appendChild(moveSelect); leftGroup.appendChild(quickMoveBtn);
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(moveSelect); leftGroup.appendChild(quickMoveBtn);
+            }
 
             const editBtn = document.createElement('button');
             editBtn.className = 'bar-button row-bar-btn edit-btn';
@@ -3409,7 +3540,9 @@
                 e.stopPropagation();
                 openVideoEditor(videoName, projectPath, subfolder, projectName);
             };
-            leftGroup.appendChild(editBtn);
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(editBtn);
+            }
 
             const catBtn = document.createElement('button');
             catBtn.className = 'bar-button row-bar-btn';
@@ -3436,7 +3569,9 @@
                 updateRowUI(rowDiv, videoName, projectPath);
                 renderCategoriesPanel();
             };
-            leftGroup.appendChild(catBtn);
+            if (!isPlaylistMode) {
+                leftGroup.appendChild(catBtn);
+            }
 
             bar.appendChild(leftGroup);
 
@@ -3454,7 +3589,7 @@
                 nameSpan.appendChild(icon);
             }
             
-            nameSpan.appendChild(document.createTextNode(videoName));
+            nameSpan.appendChild(document.createTextNode(videoName || ''));
             rightGroup.appendChild(nameSpan);
             bar.appendChild(rightGroup);
 
@@ -3828,7 +3963,7 @@
                 'function Resolve-PSPath {',
                 '    param([string]\$base, [string]\$relPath, [string]\$name, [string]\$sub)',
                 '    \$p = \$base',
-                '    if (\$relPath) { ',
+                '    if (\$relPath -and \$relPath -ne "undefined") { ',
                 '        \$tryRel = Join-Path -Path \$p -ChildPath \$relPath',
                 '        if (Test-Path -LiteralPath \$tryRel) { \$p = \$tryRel }',
                 '        else {',
@@ -3839,13 +3974,13 @@
                 '                \$p = \$tryRel',
                 '            }',
                 '        }',
-                '    } elseif (\$name) {',
+                '    } elseif (\$name -and \$name -ne "undefined") {',
                 '        if ((Split-Path -Leaf \$p) -ne \$name) {',
                 '            \$tryPath = (Join-Path -Path \$p -ChildPath \$name)',
                 '            if (Test-Path -LiteralPath \$tryPath) { \$p = \$tryPath }',
                 '        }',
                 '    }',
-                '    if (\$sub) { \$p = (Join-Path -Path \$p -ChildPath \$sub) }',
+                '    if (\$sub -and \$sub -ne "undefined") { \$p = (Join-Path -Path \$p -ChildPath \$sub) }',
                 '    \$final = [System.IO.Path]::GetFullPath(\$p)',
                 '    return \$final',
                 '}',
@@ -4942,6 +5077,7 @@
             editModeRotatedVideos.clear();
             initialVideoCategories.clear();
             projectCategories.clear();
+            loadErrors = [];
             thumbnailContainer.innerHTML = '';
             allVideoFiles = [];
 
@@ -5194,9 +5330,20 @@
                     await findVideos(project.handle);
                     allVideoFiles.push(...projectVideoFiles);
 
-                    const editDirHandle = await findDirectoryHandleByName(project.handle, 'Edit Thumbnails');
+                    let editDirHandle;
+                    try {
+                        editDirHandle = await findDirectoryHandleByName(project.handle, 'Edit Thumbnails');
+                    } catch (e) {
+                        loadErrors.push({ project: project.path, reason: "Missing 'Edit Thumbnails' folder" });
+                    }
+
+                    if (!editDirHandle) {
+                        canvases.set(canvasId, { id: canvasId, name: project.name, elements: canvasElements, path: project.path });
+                        continue;
+                    }
+
                     const landscapeFiles = [];
-                     for await (const entry of editDirHandle.values()) {
+                    for await (const entry of editDirHandle.values()) {
                         if (entry.kind === 'file' && entry.name.match(/\.(jpe?g|png|gif|webp)$/i)) {
                             landscapeFiles.push(await entry.getFile());
                         }
@@ -5232,7 +5379,10 @@
 
                     for (const videoName of videoNames) {
                         const videoFile = videoFileMap.get(videoName);
-                        if (!videoFile) continue;
+                        if (!videoFile) {
+                            loadErrors.push({ project: project.path, video: videoName, reason: "Thumbnails exist but video file is missing" });
+                            continue;
+                        }
 
                         const hasProjectSc = checkShortcut(videoFile.name, projectScData);
                         let rootScEntry = checkShortcut(videoFile.name, rootProjectShortcutsSet);
@@ -5270,17 +5420,30 @@
 
                         if (isShortcutsOnly) {
                             if (currentMode === 'root-sc' || currentMode === 'playlist-root') {
-                                if (!hasRootSc) continue;
+                                if (!hasRootSc) {
+                                    loadErrors.push({ project: project.path, video: videoFile.name, reason: "No root shortcut found" });
+                                    continue;
+                                }
                             } else if (currentMode === 'update-playlist-root') {
-                                if (!hasRootSc) continue;
+                                if (!hasRootSc) {
+                                    loadErrors.push({ project: project.path, video: videoFile.name, reason: "No root shortcut found (Update Playlist Mode)" });
+                                    continue;
+                                }
                                 const effectiveDate = scDate || videoFile.lastModified;
-                                if (playlistCreationTime && effectiveDate <= (playlistCreationTime + 1000)) continue;
+                                if (playlistCreationTime && effectiveDate <= (playlistCreationTime + 1000)) {
+                                    loadErrors.push({ project: project.path, video: videoFile.name, reason: "Shortcut date before playlist cutoff" });
+                                    continue;
+                                }
                             } else if (hasAnyShortcuts) {
-                                if (!hasProjectSc && !hasRootSc) continue;
+                                if (!hasProjectSc && !hasRootSc) {
+                                    loadErrors.push({ project: project.path, video: videoFile.name, reason: "No project or root shortcut found" });
+                                    continue;
+                                }
                             }
                         }
 
                         if (isNewOnly && mostRecentShortcutTime && videoFile.lastModified <= mostRecentShortcutTime) {
+                            loadErrors.push({ project: project.path, video: videoFile.name, reason: "Video not newer than last shortcut" });
                             continue;
                         }
 
@@ -6117,7 +6280,11 @@
                 '',
                 'function Add-PlaylistEntry {',
                 '    param([string]$path, [string]\$rotation, [int]\$multiplier, [string]\$rotationKey)',
-                '    \$fullPath = [System.IO.Path]::GetFullPath((Join-Path -Path \$BaseDir -ChildPath $path))',
+                '    if ([System.IO.Path]::IsPathRooted($path)) {',
+                '        \$fullPath = [System.IO.Path]::GetFullPath($path)',
+                '    } else {',
+                '        \$fullPath = [System.IO.Path]::GetFullPath((Join-Path -Path \$BaseDir -ChildPath $path))',
+                '    }',
                 '    \$key = if (\$rotationKey) { \$rotationKey } else { [System.IO.Path]::GetFileName(\$fullPath) }',
                 '    if (\$script:addedTargets.Add(\$fullPath)) {',
                 '        if (\$rotation -and \$rotation -ne "0") {',
@@ -6253,7 +6420,11 @@
                 scriptLines.push('if (Test-Path -LiteralPath \"$rootScFolder\") {');
                 scriptLines.push('    \$rotationCache = @{}');
                 scriptLines.push('    $shortcuts = Get-ChildItem -LiteralPath \"$rootScFolder\" -File | Where-Object { \$_.Extension -match \'^\\.(lnk|ink)\$\' }');
+                scriptLines.push('    \$totalShortcuts = \$shortcuts.Count');
+                scriptLines.push('    \$count = 0');
                 scriptLines.push('    foreach ($shortcutFile in $shortcuts) {');
+                scriptLines.push('        \$count++');
+                scriptLines.push('        if (\$count % 50 -eq 0) { Write-Host "Processing root shortcut \$count of \$totalShortcuts..." }');
                 scriptLines.push('        \$targetPath = Get-ShortcutTarget $shortcutFile.FullName');
                 scriptLines.push('        if (-not \$targetPath) { continue }');
                 scriptLines.push('        foreach ($projPath in \$rootSelections.Keys) {');
@@ -6291,7 +6462,11 @@
                 scriptLines.push('        \$multiplier = \$subfolderSelections[$projPath]');
                 scriptLines.push('        \$rotationMap = Get-RotationDataMap $projPath');
                 scriptLines.push('        $projectShortcuts = Get-ChildItem -LiteralPath \"\$projPath\" -Recurse -File | Where-Object { \$_.Extension -match \'^\\.(lnk|ink)\$\' -and -not \$_.FullName.StartsWith(\$rootScFolder + [IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) }');
+                scriptLines.push('        \$totalProjShortcuts = \$projectShortcuts.Count');
+                scriptLines.push('        \$pCount = 0');
                 scriptLines.push('        foreach ($shortcutFile in $projectShortcuts) {');
+                scriptLines.push('            \$pCount++');
+                scriptLines.push('            if (\$pCount % 50 -eq 0) { Write-Host "Processing subfolder shortcut \$pCount of \$totalProjShortcuts in project..." }');
                 scriptLines.push('            \$targetPath = Get-ShortcutTarget $shortcutFile.FullName');
                 scriptLines.push('            if (-not \$targetPath) { continue }');
                 scriptLines.push('            \$videoName = [System.IO.Path]::GetFileName(\$targetPath).ToLower()');
